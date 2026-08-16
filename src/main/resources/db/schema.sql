@@ -327,6 +327,7 @@ CREATE TABLE IF NOT EXISTS import_document (
     total_sections INT          NOT NULL DEFAULT 0 COMMENT '识别出的内容块总数',
     success_count  INT          NOT NULL DEFAULT 0 COMMENT '审核通过入库条数',
     failed_count   INT          NOT NULL DEFAULT 0 COMMENT '驳回/解析失败条数',
+    error_message  VARCHAR(500) NULL COMMENT '解析失败原因（status=5 时记录，见 10.3 状态机）',
     created_by     BIGINT       NOT NULL COMMENT '管理员 id',
     created_at     DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at     DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,

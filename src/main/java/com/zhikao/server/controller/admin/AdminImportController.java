@@ -54,6 +54,13 @@ public class AdminImportController {
         return Result.ok(importDocumentMapper.selectPage(new Page<>(page, size), wrapper));
     }
 
+    @Operation(summary = "开始/重新解析（异步，状态 0→1→2/5）")
+    @PostMapping("/documents/{id}/parse")
+    public Result<Void> parse(@PathVariable Long id) {
+        documentImportService.parseDocument(id);
+        return Result.ok();
+    }
+
     @Operation(summary = "导入任务详情")
     @GetMapping("/documents/{id}")
     public Result<ImportDocument> documentDetail(@PathVariable Long id) {

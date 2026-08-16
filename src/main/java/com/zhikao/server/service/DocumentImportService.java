@@ -2,11 +2,15 @@ package com.zhikao.server.service;
 
 import com.zhikao.server.common.BizException;
 import com.zhikao.server.common.ErrorCode;
+import com.zhikao.server.document.model.ParsedDocument;
+import com.zhikao.server.document.parser.DocumentParserRouter;
 import com.zhikao.server.entity.ImportDocument;
 import com.zhikao.server.mapper.ImportDocumentMapper;
 import com.zhikao.server.storage.FileStorage;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
@@ -17,14 +21,17 @@ import java.util.Locale;
 import java.util.Set;
 
 /**
- * 知识库导入服务（T3.6：上传与存储；T3.7 起补解析编排）。
+ * 知识库导入服务（T3.6 上传存储；T3.7 解析编排）。
  *
- * <p>上传约定（任务书 6.1）：
- *  - 类型白名单 .pdf/.docx/.doc/.txt（非法返回 4001）
- *  - 单文件 ≤ 20MB（超限返回 4002）
- *  - 单批次 ≤ 10 个文件
- *  - 上传只落 import_document（status=0）与文件存储，不写任何正式内容表
+ * <p>上传约定（任务书 6.1）：白名单类型（4001）、≤20MB（4002）、≤10 个/批、
+ * 只落 import_document（status=0）与文件存储，不写正式内容表。
+ *
+ * <p>解析状态机（任务书 10.3）：
+ *  - 0 上传成功 → 1 解析中 → 2 解析完成
+ *  - 解析失败 → 5 FAILED（记录 error_message，可重新解析）
+ *  - 扫描版 PDF 无文本层 → 识别为 SCANNED_PDF，返回 4003（V1.0 不支持 OCR）
  */
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class DocumentImportService {
@@ -35,6 +42,7 @@ public class DocumentImportService {
 
     private final ImportDocumentMapper importDocumentMapper;
     private final FileStorage fileStorage;
+    private final DocumentParserRouter parserRouter;
 
     @Value("${zhikao.storage.upload-dir:uploads}")
     private String uploadDir;
@@ -197,6 +205,60 @@ public class DocumentImportService {
 
         public void setErrorMessage(String errorMessage) {
             this.errorMessage = errorMessage;
+        }
+    }
+
+    /**
+     * 开始/重新解析（T3.7）。
+     * 允许源状态：0/2/3/5（10.3 状态机；状态 4 已完成不允许重新解析）。
+     * 异步执行：0→1→2/5。
+     *
+     * @throws BizException 4004：状态不允许；4003：扫描版 PDF
+     */
+    public void parseDocument(Long documentId) {
+        ImportDocument doc = importDocumentMapper.selectById(documentId);
+        if (doc == null) {
+            throw new BizException(ErrorCode.NOT_FOUND, "导入任务不存在");
+        }
+        int status = doc.getStatus();
+        if (status == 1) {
+            throw new BizException(ErrorCode.IMPORT_STATE_INVALID, "文档正在解析中");
+        }
+        if (status == 4) {
+            throw new BizException(ErrorCode.IMPORT_STATE_INVALID, "文档已完成，不允许重新解析");
+        }
+        // 置为解析中（0/2/3/5 → 1）
+        doc.setStatus(1);
+        importDocumentMapper.updateById(doc);
+        // 异步解析（幂等：重复触发同一文档时，状态=1 已在上面拦截）
+        doParseAsync(documentId);
+    }
+
+    /** 异步执行解析（T3.7 骨架：文本提取；T3.8 接入结构化识别） */
+    @Async
+    public void doParseAsync(Long documentId) {
+        ImportDocument doc = importDocumentMapper.selectById(documentId);
+        try {
+            ParsedDocument parsed = parserRouter.parse(doc.getFileType(), doc.getFilePath());
+            if (parsed.isScannedPdf()) {
+                // 扫描版 PDF 无文本层：标记并拒绝（V1.0 不支持 OCR）
+                doc.setFileType("SCANNED_PDF");
+                doc.setStatus(0);
+                importDocumentMapper.updateById(doc);
+                log.info("文档 {} 为扫描版 PDF（SCANNED_PDF），V1.0 不支持 OCR", documentId);
+                return;
+            }
+            // T3.7：文本提取完成 → status=2；T3.8 将在此处接入结构化识别生成草稿
+            doc.setStatus(2);
+            importDocumentMapper.updateById(doc);
+            log.info("文档 {} 解析完成（status=2），文本长度 {}", documentId,
+                    parsed.getRawText() == null ? 0 : parsed.getRawText().length());
+        } catch (Exception e) {
+            // 解析失败：5 FAILED，记录 error_message（10.3 状态机）
+            doc.setStatus(5);
+            doc.setErrorMessage(e.getMessage() == null ? "解析失败" : e.getMessage());
+            importDocumentMapper.updateById(doc);
+            log.error("文档 {} 解析失败（status=5）: {}", documentId, e.getMessage());
         }
     }
 }

@@ -39,6 +39,9 @@ public class ImportDocument {
 
     private Integer failedCount;
 
+    /** 解析失败原因（status=5 时记录；任务书 10.3 状态机要求，5.2 表结构补充） */
+    private String errorMessage;
+
     private Long createdBy;
 
     private LocalDateTime createdAt;
