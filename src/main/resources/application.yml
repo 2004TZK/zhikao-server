@@ -6,11 +6,11 @@ spring:
   jackson:
     date-format: yyyy-MM-dd HH:mm:ss
     time-zone: Asia/Shanghai
-  # 数据源配置（T2.3 建表后启用；T2.1 空工程阶段由启动类排除 DataSource 自动配置保证可启动）
+  # 数据源配置（T2.3 建表后启用）
   datasource:
     url: jdbc:mysql://localhost:3306/zhikao?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
     username: root
-    password: root
+    password: 123456
     driver-class-name: com.mysql.cj.jdbc.Driver
   data:
     redis:
