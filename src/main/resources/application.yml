@@ -27,6 +27,13 @@ zhikao:
     secret: zhikao-dev-secret-key-please-change-in-production-2026
     access-token-ttl-ms: 1800000      # Access Token 30 分钟
     refresh-token-ttl-ms: 604800000   # Refresh Token 7 天
+    admin-secret: zhikao-admin-secret-please-change-in-production-2026
+    admin-token-ttl-ms: 7200000       # 管理员 Token 2 小时
+  # 管理员账号（T3.1 开发期方案：配置存储；任务书未定义 admin_user 表，
+  # 待契约补充后迁移至数据库，见 14.4 契约优先流程）
+  admin:
+    username: admin
+    password: admin123456
 
 mybatis-plus:
   configuration:

@@ -15,12 +15,14 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
- * JWT 认证过滤器：解析 Authorization: Bearer <token>。
- *  - 校验通过：写入 Spring SecurityContext（授权层识别）+ AuthContext（业务层取 userId）
- *  - 校验失败：不写入认证信息，由 RestAuthenticationEntryPoint 返回契约 2001
+ * JWT 认证过滤器（T3.1 扩展）：
+ *  - 用户 Access Token（Authorization: Bearer）：写入 ROLE_USER，业务上下文 AuthContext
+ *  - 管理员 Token（独立体系）：写入 ROLE_ADMIN，不写入业务 AuthContext
+ *  - 校验失败：不写入认证信息，由 RestAuthenticationEntryPoint 返回 2001
  */
 @Component
 @RequiredArgsConstructor
@@ -29,6 +31,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private static final String BEARER_PREFIX = "Bearer ";
 
     private final JwtUtil jwtUtil;
+    private final AdminJwtUtil adminJwtUtil;
 
     @Override
     protected void doFilterInternal(@NonNull HttpServletRequest request,
@@ -39,13 +42,14 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             String header = request.getHeader("Authorization");
             if (header != null && header.startsWith(BEARER_PREFIX)) {
                 String token = header.substring(BEARER_PREFIX.length());
+
+                // 先尝试解析用户 Access Token
                 Claims claims = jwtUtil.parseToken(token);
                 if (claims != null && SecurityContextHolder.getContext().getAuthentication() == null) {
                     Long userId = Long.valueOf(claims.getSubject());
                     Integer userType = claims.get("userType", Integer.class);
                     String username = claims.get("username", String.class);
 
-                    // 写入 SecurityContext（Spring Security 授权层识别）
                     UsernamePasswordAuthenticationToken authentication =
                             new UsernamePasswordAuthenticationToken(
                                     username, null,
@@ -53,8 +57,19 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                     authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
                     SecurityContextHolder.getContext().setAuthentication(authentication);
 
-                    // 写入业务上下文（Controller/Service 取 userId / userType）
                     AuthContext.set(userId, userType);
+                } else {
+                    // 再尝试解析管理员 Token（独立体系）
+                    Claims adminClaims = adminJwtUtil.parseAdminToken(token);
+                    if (adminClaims != null && SecurityContextHolder.getContext().getAuthentication() == null) {
+                        String adminName = adminClaims.getSubject();
+                        List<SimpleGrantedAuthority> authorities = new ArrayList<>();
+                        authorities.add(new SimpleGrantedAuthority("ROLE_ADMIN"));
+                        UsernamePasswordAuthenticationToken adminAuth =
+                                new UsernamePasswordAuthenticationToken(adminName, null, authorities);
+                        adminAuth.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+                        SecurityContextHolder.getContext().setAuthentication(adminAuth);
+                    }
                 }
             }
             filterChain.doFilter(request, response);
