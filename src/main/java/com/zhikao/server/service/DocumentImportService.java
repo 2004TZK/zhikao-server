@@ -4,6 +4,7 @@ import com.zhikao.server.common.BizException;
 import com.zhikao.server.common.ErrorCode;
 import com.zhikao.server.document.model.ParsedDocument;
 import com.zhikao.server.document.parser.DocumentParserRouter;
+import com.zhikao.server.document.service.ContentExtractService;
 import com.zhikao.server.entity.ImportDocument;
 import com.zhikao.server.mapper.ImportDocumentMapper;
 import com.zhikao.server.storage.FileStorage;
@@ -43,6 +44,7 @@ public class DocumentImportService {
     private final ImportDocumentMapper importDocumentMapper;
     private final FileStorage fileStorage;
     private final DocumentParserRouter parserRouter;
+    private final ContentExtractService contentExtractService;
 
     @Value("${zhikao.storage.upload-dir:uploads}")
     private String uploadDir;
@@ -248,11 +250,12 @@ public class DocumentImportService {
                 log.info("文档 {} 为扫描版 PDF（SCANNED_PDF），V1.0 不支持 OCR", documentId);
                 return;
             }
-            // T3.7：文本提取完成 → status=2；T3.8 将在此处接入结构化识别生成草稿
+            // 结构化识别：规则切分 → import_record 草稿（10.4；识别失败不中断，原文保留）
+            int sectionCount = contentExtractService.extractAndSave(doc, parsed);
             doc.setStatus(2);
+            doc.setTotalSections(sectionCount);
             importDocumentMapper.updateById(doc);
-            log.info("文档 {} 解析完成（status=2），文本长度 {}", documentId,
-                    parsed.getRawText() == null ? 0 : parsed.getRawText().length());
+            log.info("文档 {} 解析完成（status=2），生成草稿 {} 条", documentId, sectionCount);
         } catch (Exception e) {
             // 解析失败：5 FAILED，记录 error_message（10.3 状态机）
             doc.setStatus(5);

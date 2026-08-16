@@ -4,7 +4,9 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.zhikao.server.common.Result;
 import com.zhikao.server.entity.ImportDocument;
+import com.zhikao.server.entity.ImportRecord;
 import com.zhikao.server.mapper.ImportDocumentMapper;
+import com.zhikao.server.mapper.ImportRecordMapper;
 import com.zhikao.server.service.DocumentImportService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -31,6 +33,7 @@ public class AdminImportController {
 
     private final DocumentImportService documentImportService;
     private final ImportDocumentMapper importDocumentMapper;
+    private final ImportRecordMapper importRecordMapper;
 
     @Operation(summary = "上传文档（≤10 个/批，白名单类型，≤20MB）")
     @PostMapping("/upload")
@@ -59,6 +62,37 @@ public class AdminImportController {
     public Result<Void> parse(@PathVariable Long id) {
         documentImportService.parseDocument(id);
         return Result.ok();
+    }
+
+    @Operation(summary = "草稿列表（分页，支持 documentId/contentType/status 过滤）")
+    @GetMapping("/records")
+    public Result<Page<ImportRecord>> records(@RequestParam(defaultValue = "1") int page,
+                                              @RequestParam(defaultValue = "20") int size,
+                                              @RequestParam(required = false) Long documentId,
+                                              @RequestParam(required = false) Integer contentType,
+                                              @RequestParam(required = false) Integer status) {
+        LambdaQueryWrapper<ImportRecord> wrapper = new LambdaQueryWrapper<>();
+        if (documentId != null) {
+            wrapper.eq(ImportRecord::getDocumentId, documentId);
+        }
+        if (contentType != null) {
+            wrapper.eq(ImportRecord::getContentType, contentType);
+        }
+        if (status != null) {
+            wrapper.eq(ImportRecord::getStatus, status);
+        }
+        wrapper.orderByDesc(ImportRecord::getCreatedAt);
+        return Result.ok(importRecordMapper.selectPage(new Page<>(page, size), wrapper));
+    }
+
+    @Operation(summary = "草稿详情（parsedContent + rawExcerpt 对照）")
+    @GetMapping("/records/{id}")
+    public Result<ImportRecord> recordDetail(@PathVariable Long id) {
+        ImportRecord record = importRecordMapper.selectById(id);
+        if (record == null) {
+            return Result.fail(com.zhikao.server.common.ErrorCode.NOT_FOUND, "草稿不存在");
+        }
+        return Result.ok(record);
     }
 
     @Operation(summary = "导入任务详情")
