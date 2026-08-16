@@ -8,6 +8,7 @@ import com.zhikao.server.dto.IdiomRequest;
 import com.zhikao.server.entity.Idiom;
 import com.zhikao.server.entity.IdiomCategory;
 import com.zhikao.server.entity.IdiomCategoryRel;
+import com.zhikao.server.entity.ImportDocument;
 import com.zhikao.server.mapper.IdiomCategoryMapper;
 import com.zhikao.server.mapper.IdiomCategoryRelMapper;
 import com.zhikao.server.mapper.IdiomMapper;
@@ -144,6 +145,33 @@ public class IdiomAdminService {
         category.setStatus(1);
         categoryMapper.insert(category);
         return category;
+    }
+
+    /**
+     * 从导入草稿写入正式表（T3.9）。
+     * 来源回写（10.5）：source_type=4 / source_document_id / source_title。
+     */
+    @Transactional
+    public Long createFromDraft(java.util.Map<String, Object> parsed, ImportDocument document) {
+        Idiom idiom = new Idiom();
+        idiom.setWord(str(parsed.get("word")));
+        idiom.setPinyin(str(parsed.get("pinyin")));
+        idiom.setExplanation(str(parsed.get("explanation")));
+        idiom.setOrigin(str(parsed.get("origin")));
+        idiom.setExample(str(parsed.get("example")));
+        idiom.setSynonyms(str(parsed.get("synonyms")));
+        idiom.setAntonyms(str(parsed.get("antonyms")));
+        idiom.setDifficulty(3);
+        idiom.setStatus(1);
+        idiom.setSourceType(4);
+        idiom.setSourceDocumentId(document.getId());
+        idiom.setSourceTitle(document.getFileName());
+        idiomMapper.insert(idiom);
+        return idiom.getId();
+    }
+
+    private static String str(Object value) {
+        return value == null ? null : String.valueOf(value);
     }
 
     private void saveCategoryRels(Long idiomId, List<Long> categoryIds) {

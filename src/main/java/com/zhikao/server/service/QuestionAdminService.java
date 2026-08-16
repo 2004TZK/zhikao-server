@@ -7,6 +7,7 @@ import com.zhikao.server.common.ErrorCode;
 import com.zhikao.server.dto.QuestionRequest;
 import com.zhikao.server.entity.Question;
 import com.zhikao.server.entity.QuestionOption;
+import com.zhikao.server.entity.ImportDocument;
 import com.zhikao.server.mapper.QuestionMapper;
 import com.zhikao.server.mapper.QuestionOptionMapper;
 import lombok.RequiredArgsConstructor;
@@ -108,6 +109,56 @@ public class QuestionAdminService {
         }
         question.setStatus(1);
         questionMapper.updateById(question);
+    }
+
+    /**
+     * 从导入草稿写入正式表（T3.9）。
+     * 草稿含题干/选项/答案/解析；来源回写（10.5）。
+     * 关联（knowledgeId/idiomId）在审核环节人工指定后随 parsedContent 传入。
+     */
+    @SuppressWarnings("unchecked")
+    @Transactional
+    public Long createFromDraft(java.util.Map<String, Object> parsed, ImportDocument document) {
+        Question question = new Question();
+        question.setType(1);
+        question.setContent(str(parsed.get("content")));
+        question.setAnalysis(str(parsed.get("analysis")));
+        question.setDifficulty(3);
+        Object kId = parsed.get("knowledgeId");
+        Object iId = parsed.get("idiomId");
+        question.setKnowledgeId(kId != null ? Long.valueOf(String.valueOf(kId)) : null);
+        question.setIdiomId(iId != null ? Long.valueOf(String.valueOf(iId)) : null);
+        // 至少关联一个知识点或成语（5.2 硬约束）
+        if (question.getKnowledgeId() == null && question.getIdiomId() == null) {
+            throw new BizException(ErrorCode.BIZ_CONFLICT, "题目必须至少关联一个知识点或成语，请在审核时指定");
+        }
+        question.setSourceType(4);
+        question.setSourceDocumentId(document.getId());
+        question.setStatus(1);
+        questionMapper.insert(question);
+
+        // 选项落库（草稿 options: [{label,content,isCorrect}]；answer 标记正确项）
+        Object optionsObj = parsed.get("options");
+        String answer = str(parsed.get("answer"));
+        if (optionsObj instanceof java.util.List<?> options) {
+            for (Object o : options) {
+                if (o instanceof java.util.Map<?, ?> option) {
+                    QuestionOption qo = new QuestionOption();
+                    qo.setQuestionId(question.getId());
+                    String label = str(option.get("label"));
+                    qo.setLabel(label == null ? "A" : label);
+                    qo.setContent(str(option.get("content")));
+                    boolean isAnswer = answer != null && answer.trim().equalsIgnoreCase(label);
+                    qo.setIsCorrect(isAnswer ? 1 : 0);
+                    optionMapper.insert(qo);
+                }
+            }
+        }
+        return question.getId();
+    }
+
+    private static String str(Object value) {
+        return value == null ? null : String.valueOf(value);
     }
 
     /**

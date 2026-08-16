@@ -7,6 +7,7 @@ import com.zhikao.server.common.ErrorCode;
 import com.zhikao.server.dto.KnowledgeRequest;
 import com.zhikao.server.entity.Knowledge;
 import com.zhikao.server.entity.KnowledgeCategory;
+import com.zhikao.server.entity.ImportDocument;
 import com.zhikao.server.mapper.KnowledgeCategoryMapper;
 import com.zhikao.server.mapper.KnowledgeMapper;
 import lombok.RequiredArgsConstructor;
@@ -127,6 +128,43 @@ public class KnowledgeAdminService {
         category.setStatus(1);
         categoryMapper.insert(category);
         return category;
+    }
+
+    /**
+     * 从导入草稿写入正式表（T3.9）。
+     * 来源回写（10.5）：source_type=4 / source_document_id / source_title。
+     */
+    @Transactional
+    public Long createFromDraft(java.util.Map<String, Object> parsed, ImportDocument document) {
+        Knowledge knowledge = new Knowledge();
+        knowledge.setTitle(str(parsed.get("title")));
+        knowledge.setSummary(str(parsed.get("summary")));
+        knowledge.setContent(str(parsed.get("content")));
+        knowledge.setKeyPoints(str(parsed.get("keyPoints")));
+        knowledge.setCommonMistakes(str(parsed.get("commonMistakes")));
+        knowledge.setCategoryId(firstCategoryId());
+        knowledge.setDifficulty(3);
+        knowledge.setStatus(1);
+        // 来源回写（10.5）
+        knowledge.setSourceType(4);
+        knowledge.setSourceDocumentId(document.getId());
+        knowledge.setSourceTitle(document.getFileName());
+        knowledgeMapper.insert(knowledge);
+        return knowledge.getId();
+    }
+
+    /** 取第一个分类作为默认分类（审核环节在管理页可调整） */
+    private Long firstCategoryId() {
+        List<KnowledgeCategory> cats = categoryMapper.selectList(
+                new LambdaQueryWrapper<KnowledgeCategory>().orderByAsc(KnowledgeCategory::getId).last("LIMIT 1"));
+        if (cats.isEmpty()) {
+            throw new BizException(ErrorCode.BIZ_CONFLICT, "尚无常识分类，请先创建分类");
+        }
+        return cats.get(0).getId();
+    }
+
+    private static String str(Object value) {
+        return value == null ? null : String.valueOf(value);
     }
 
     private void validateCategory(Long categoryId) {
