@@ -15,6 +15,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -106,6 +107,77 @@ public class ImportReviewService {
         importRecordMapper.updateById(record);
 
         updateDocumentStats(record.getDocumentId());
+    }
+
+    /**
+     * 批量审核通过（T3.10，契约 6.12 batch-approve）。
+     * 逐条处理、逐条返回结果；单条失败不中断、不影响已成功条目（10.7 部分成功机制）。
+     * 非法条目返回其 errorMessage，成功条目返回 recordId。
+     */
+    @Transactional
+    public List<BatchApproveResult> batchApprove(List<Long> recordIds, Long reviewerId) {
+        if (recordIds == null || recordIds.isEmpty()) {
+            throw new BizException(ErrorCode.PARAM_INVALID, "recordIds 不能为空");
+        }
+        List<BatchApproveResult> results = new java.util.ArrayList<>();
+        for (Long recordId : recordIds) {
+            BatchApproveResult result = new BatchApproveResult();
+            result.setRecordId(recordId);
+            try {
+                approve(recordId, reviewerId);
+                result.setSuccess(true);
+            } catch (BizException e) {
+                result.setSuccess(false);
+                result.setErrorCode(e.getCode());
+                result.setErrorMessage(e.getMessage());
+            } catch (Exception e) {
+                result.setSuccess(false);
+                result.setErrorCode(ErrorCode.INTERNAL_ERROR.getCode());
+                result.setErrorMessage("入库失败: " + e.getMessage());
+            }
+            results.add(result);
+        }
+        return results;
+    }
+
+    /** 批量审核结果项 */
+    public static class BatchApproveResult {
+        private Long recordId;
+        private boolean success;
+        private Integer errorCode;
+        private String errorMessage;
+
+        public Long getRecordId() {
+            return recordId;
+        }
+
+        public void setRecordId(Long recordId) {
+            this.recordId = recordId;
+        }
+
+        public boolean isSuccess() {
+            return success;
+        }
+
+        public void setSuccess(boolean success) {
+            this.success = success;
+        }
+
+        public Integer getErrorCode() {
+            return errorCode;
+        }
+
+        public void setErrorCode(Integer errorCode) {
+            this.errorCode = errorCode;
+        }
+
+        public String getErrorMessage() {
+            return errorMessage;
+        }
+
+        public void setErrorMessage(String errorMessage) {
+            this.errorMessage = errorMessage;
+        }
     }
 
     /** 按内容类型写入对应正式表并返回新记录 id */

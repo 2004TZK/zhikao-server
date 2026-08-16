@@ -55,6 +55,18 @@ public class AdminImportReviewController {
         return Result.ok();
     }
 
+    @Operation(summary = "批量审核通过（逐条处理，部分失败不影响成功条目）")
+    @PostMapping("/batch-approve")
+    public Result<java.util.List<ImportReviewService.BatchApproveResult>> batchApprove(
+            @RequestBody BatchApproveRequest request) {
+        return Result.ok(importReviewService.batchApprove(request.getRecordIds(), 1L));
+    }
+
+    @Data
+    public static class BatchApproveRequest {
+        private java.util.List<Long> recordIds;
+    }
+
     @Data
     public static class EditRequest {
         private String parsedContent;

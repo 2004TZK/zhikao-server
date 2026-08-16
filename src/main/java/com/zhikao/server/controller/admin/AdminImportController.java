@@ -95,6 +95,24 @@ public class AdminImportController {
         return Result.ok(record);
     }
 
+    @Operation(summary = "导入任务统计面板（总文件/解析成功/各类草稿数/待审核数）")
+    @GetMapping("/stats")
+    public Result<java.util.Map<String, Long>> stats() {
+        java.util.Map<String, Long> map = new java.util.LinkedHashMap<>();
+        map.put("totalDocuments", importDocumentMapper.selectCount(null));
+        map.put("parsedOk", importDocumentMapper.selectCount(new LambdaQueryWrapper<ImportDocument>()
+                .in(ImportDocument::getStatus, 2, 3, 4)));
+        map.put("knowledgeDrafts", importRecordMapper.selectCount(new LambdaQueryWrapper<ImportRecord>()
+                .eq(ImportRecord::getContentType, 1)));
+        map.put("idiomDrafts", importRecordMapper.selectCount(new LambdaQueryWrapper<ImportRecord>()
+                .eq(ImportRecord::getContentType, 2)));
+        map.put("questionDrafts", importRecordMapper.selectCount(new LambdaQueryWrapper<ImportRecord>()
+                .eq(ImportRecord::getContentType, 3)));
+        map.put("pendingReview", importRecordMapper.selectCount(new LambdaQueryWrapper<ImportRecord>()
+                .eq(ImportRecord::getStatus, 0)));
+        return Result.ok(map);
+    }
+
     @Operation(summary = "导入任务详情")
     @GetMapping("/documents/{id}")
     public Result<ImportDocument> documentDetail(@PathVariable Long id) {
