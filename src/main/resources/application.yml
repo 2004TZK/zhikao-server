@@ -17,6 +17,11 @@ spring:
       host: localhost
       port: 6379
       database: 0
+  # 文件上传限制（任务书 6.1：单文件 ≤ 20MB，批量 ≤ 10 个）
+  servlet:
+    multipart:
+      max-file-size: 20MB
+      max-request-size: 200MB
 
 server:
   port: 8080
@@ -34,6 +39,9 @@ zhikao:
   admin:
     username: admin
     password: admin123456
+  # 文件存储（T3.6；开发环境本地磁盘，生产切换 MinIO/OSS/OBS 不改业务代码）
+  storage:
+    local-root: uploads
 
 mybatis-plus:
   configuration:

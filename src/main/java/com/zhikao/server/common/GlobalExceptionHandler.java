@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 /**
@@ -71,6 +72,13 @@ public class GlobalExceptionHandler {
     @ResponseStatus(HttpStatus.OK)
     public Result<Void> handleNotReadable(HttpMessageNotReadableException e) {
         return Result.fail(ErrorCode.PARAM_INVALID, "请求体格式错误");
+    }
+
+    /** 上传文件超限（Tomcat/Servlet 容器层拦截，契约 4002） */
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    @ResponseStatus(HttpStatus.OK)
+    public Result<Void> handleMaxUpload(MaxUploadSizeExceededException e) {
+        return Result.fail(ErrorCode.FILE_TOO_LARGE, "文件大小超限（单文件 ≤ 20MB）");
     }
 
     /** 资源不存在（404） */
